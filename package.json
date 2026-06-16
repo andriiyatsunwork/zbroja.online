@@ -1,0 +1,12 @@
+{
+  "name": "zbroja-online-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "infra:up": "docker-compose -f infra/docker-compose.yml --env-file .env up -d",
+    "infra:down": "docker-compose -f infra/docker-compose.yml down"
+  }
+}
