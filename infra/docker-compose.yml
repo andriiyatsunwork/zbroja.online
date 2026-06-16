@@ -3,16 +3,22 @@ services:
     image: postgres:16-alpine
     container_name: zbroja_postgres
     restart: unless-stopped
+    # Завантажуємо змінні з .env файлу
     env_file:
-      - ../.env
+      - .env # або ../.env, залежно від того, де лежить файл
+    # КРИТИЧНЕ ВИПРАВЛЕННЯ:
+    environment:
+      POSTGRES_USER: ${DB_USER:-zbroja_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-zbroja123}
+      POSTGRES_DB: ${DB_NAME:-zbroja_db}
     ports:
-      # ЗМІНЕНО: тепер ми слухаємо порт 5433 на вашому Windows, щоб уникнути конфліктів
       - "5433:5432"
     volumes:
-      # ЗМІНЕНО: нова назва диска гарантує, що база створиться абсолютно чистою
-      - postgres_data_v2:/var/lib/postgresql/data
+      # Змінено на v3 для 100% гарантії чистої ініціалізації
+      - postgres_data_v3:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U zbroja_admin -d zbroja_db"]
+      # Виправлено користувача з zbroja_admin на правильну змінну
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-zbroja_user} -d ${DB_NAME:-zbroja_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -32,5 +38,5 @@ services:
       retries: 5
 
 volumes:
-  postgres_data_v2:
+  postgres_data_v3:
   redis_data:

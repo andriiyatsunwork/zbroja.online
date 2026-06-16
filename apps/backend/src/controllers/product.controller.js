@@ -1,22 +1,35 @@
+// Файл: apps/backend/src/controllers/product.controller.js
 import db from '../config/db.js';
 
 export const getProducts = async (req, res) => {
   try {
-    const { category, priceMin, priceMax, limit = 20, offset = 0 } = req.query;
+    const { category, priceMin, priceMax } = req.query;
+    
+    // Валідація та безпечний парсинг пагінації
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100); // Максимум 100 елементів
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);  // Не менше 0
 
-    let query = db('products').select('*');
+    let query = db('products').select('id', 'name', 'slug', 'image_url', 'min_price');
 
     if (category) {
       query = query.where('category_id', category);
     }
-    
-    if (priceMin) query = query.where('min_price', '>=', priceMin);
-    if (priceMax) query = query.where('min_price', '<=', priceMax);
+    if (priceMin) {
+      query = query.where('min_price', '>=', parseFloat(priceMin));
+    }
+    if (priceMax) {
+      query = query.where('min_price', '<=', parseFloat(priceMax));
+    }
 
     const products = await query.limit(limit).offset(offset);
-    res.json(products);
+    
+    res.json({
+      data: products,
+      pagination: { limit, offset }
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Database query failed' });
+    console.error('❌ [getProducts] Error:', error.message);
+    res.status(500).json({ error: 'Internal server error while fetching products' });
   }
 };
 
@@ -25,10 +38,23 @@ export const getProductBySlug = async (req, res) => {
     const { slug } = req.params;
     const product = await db('products').where({ slug }).first();
     
-    if (!product) return res.status(404).json({ message: 'Product not found' });
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
     
-    res.json(product);
+    // Окремо підтягуємо пропозиції (offers) для цього товару
+    const offers = await db('offers')
+      .where({ product_id: product.id })
+      .orderBy('price', 'asc');
+      
+    res.json({
+      data: {
+        ...product,
+        offers
+      }
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    console.error(`❌ [getProductBySlug] Error for slug ${req.params.slug}:`, error.message);
+    res.status(500).json({ error: 'Internal server error while fetching product details' });
   }
 };
