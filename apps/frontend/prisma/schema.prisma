@@ -1,13 +1,101 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Це наше єдине джерело правди для всієї системи Zbroja.online
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+provider = "postgresql"
+url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------
+// 1. КАТЕГОРІЇ
+// ------------------------------------------------------
+model Category {
+id       Int       @id @default(autoincrement())
+name     String    @unique // "Патрони", "Нарізні", "Гладкоствольні"
+slug     String    @unique // "patrony", "narizni"
+parentId Int?      // Якщо це підкатегорія (наприклад, для "Нарізні" parentId буде вказувати на "Патрони")
+parent   Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+children Category[] @relation("CategoryHierarchy")
+
+products Product[]
+}
+
+// ------------------------------------------------------
+// 2. МАГАЗИНИ (Джерела даних)
+// ------------------------------------------------------
+model Store {
+id        Int      @id @default(autoincrement())
+name      String   @unique // "Ібіс", "Ствол"
+domain    String   @unique // "ibis.net.ua"
+logoUrl   String?
+isActive  Boolean  @default(true) // Можливість відключати магазин
+
+offers    Offer[]
+}
+
+// ------------------------------------------------------
+// 3. ТОВАР (Агрегована сутність - "Картка на сайті")
+// ------------------------------------------------------
+model Product {
+id           Int      @id @default(autoincrement())
+name         String   // Зведена назва: "Патрон STS .223 Rem FMJ 55gr"
+slug         String   @unique
+categoryId   Int
+category     Category @relation(fields: [categoryId], references: [id])
+
+// Глобальні атрибути для патронів
+brand        String   // "STS", "Sellier & Bellot"
+caliber      String   // ".223 Rem", "12/70"
+country      String?  // "Україна", "США"
+
+// Динамічні атрибути (Маса кулі, Контейнер, Номер дробу)
+// Зберігаємо в JSONB для супер-швидкої фільтрації специфічних параметрів
+attributes   Json?
+
+status       ProductStatus @default(DRAFT) // Ручна модерація після парсингу
+createdAt    DateTime @default(now())
+updatedAt    DateTime @updatedAt
+
+offers       Offer[]
+}
+
+enum ProductStatus {
+DRAFT
+PUBLISHED
+REJECTED
+}
+
+// ------------------------------------------------------
+// 4. ПРОПОЗИЦІЯ МАГАЗИНУ (Offer)
+// ------------------------------------------------------
+// Це те, що знайшов скрапер: конкретна ціна і наявність у конкретному магазині
+model Offer {
+id             String   @id @default(uuid())
+productId      Int
+product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+storeId        Int
+store          Store    @relation(fields: [storeId], references: [id])
+
+url            String   // Лінк на товар в Ібісі/Стволі
+originalId     String?  // Артикул магазину (щоб скрапер розумів, що це той самий товар)
+
+// Ціноутворення та пакування
+price          Float    // Повна ціна пачки/штуки
+quantityInPack Int      @default(1) // Кількість у пачці (1, 20, 50, 250)
+pricePerPiece  Float    // Розрахункова ціна за 1 шт (для фільтра "Штука/Пачка")
+
+// Наявність
+inStock        Boolean  @default(true)
+
+// Зберігаємо міста і конкретні адреси магазинів для майбутньої карти
+// Формат: [ { "city": "Київ", "address": "вул. Гетьмана, 27" }, ... ]
+availability   Json?
+
+updatedAt      DateTime @updatedAt // Коли скрапер останній раз бачив цю ціну
+
+@@unique([storeId, originalId]) // Унікальний констрейнт для безпечного парсингу
 }
